@@ -10,7 +10,11 @@ Parses logs and stores them in MongoDB
 
 - `options` (object): Configuration options
   - `mongoUri` (string): MongoDB connection URI. Defaults to `process.env.LF_MONGO_URI`.
-  - `regex` (array): Array of regex patterns to match log entries.
+  - `regex` (array): Array of regex patterns to match log entries. Each pattern should be an object with the following properties:
+    - `regex` (RegExp): The regular expression to match log entries.
+    - `fields` (array): Array of field definitions. Each field should be an object with the following properties:
+      - `name` (string): The name of the field.
+      - `type` (string): The type of the field. Can be `'string'` or `'date'`.
   - `database` (string): Name of the MongoDB database.
   - `collection` (string): Name of the MongoDB collection.
 
