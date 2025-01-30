@@ -1,35 +1,108 @@
-const Logfather = require('./logfather');
-const dotenv = require('dotenv');
+const fs = require('fs');
 
-dotenv.config();
+const { MongoClient, ServerApiVersion } = require('mongodb');
 
-const { MONGO_USER, MONGO_PASS } = process.env;
+class Logfather {
+  #collection;
+  #mongoClient;
 
-const auth = `${encodeURIComponent(MONGO_USER)}:${encodeURIComponent(
-  MONGO_PASS
-)}`;
+  constructor(options = {}) {
+    this.mongoUri = options.mongoUri || process.env.LF_MONGO_URI;
+    this.regex = options.regex || [];
+    this.lastSize = 0;
+    this.debug = options.debug || false;
 
-const uri = `mongodb+srv://${auth}@tvm-prodtek.d0kmo.mongodb.net/?retryWrites=true&w=majority&appName=tvm-prodtek`;
-
-const logfather = new Logfather({
-  mongoUri: uri,
-  debug: true,
-  database: 'logs',
-  collection: 'ease',
-  regex: [
-    {
-      regex:
-        /(\d{4}-\d{2}-\d{2}T[\.\d:A-Za-z]*)\s{1}([A-Z]{1,})\s{1}([\d\.:]*)\s{1}([\w/%]*)/g,
-      fields: [
-        { name: 'timestamp', type: 'date' },
-        { name: 'method', type: 'string' },
-        { name: 'ip', type: 'string' },
-        { name: 'path', type: 'string' }
-      ]
+    if (!this.mongoUri && !this.debug) {
+      throw new Error('Mongo URI is required');
     }
-  ]
-});
 
-console.log(logfather);
+    this.#mongoClient = new MongoClient(this.mongoUri, {
+      serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true
+      }
+    });
 
-logfather.watch('/Users/ola.ingvarsson/Documents/Code/ease/api/logs/app.log');
+    this.#collection = this.#mongoClient
+      .db(options.database)
+      .collection(options.collection);
+  }
+
+  async #saveToMongo(obj) {
+    if (this.debug) {
+      console.log('Debug:', obj);
+      return;
+    }
+    try {
+      await this.#collection.insertOne(obj);
+    } catch (err) {
+      console.error('Error saving to MongoDB:', err);
+    }
+  }
+
+  #handleChunk(chunk) {
+    // Process new content
+    const newContent = chunk.toString();
+    console.log('New content:', newContent); // TODO: Remove this line
+
+    // Add your custom processing logic here
+    this.regex.forEach((re) => {
+      const matches = newContent.matchAll(re.regex);
+
+      for (const match of matches) {
+        const obj = {};
+        re.fields.forEach((field, index) => {
+          let value = match[index + 1];
+          if (field.type === 'date') {
+            value = new Date(match[index + 1]);
+          }
+          obj[field.name] = value;
+        });
+        this.#saveToMongo(obj);
+      }
+    });
+  }
+
+  watch(logFile) {
+    logFile = logFile || process.env.LF_PATH;
+
+    if (!logFile) {
+      throw new Error('Path is required');
+    }
+
+    try {
+      const stats = fs.statSync(logFile);
+      this.lastSize = stats.size;
+    } catch (err) {
+      console.error('Error getting file stats:', err);
+    }
+
+    fs.watch(logFile, (eventType) => {
+      if (eventType === 'change') {
+        const stats = fs.statSync(logFile);
+        const newSize = stats.size;
+
+        if (newSize < this.lastSize) {
+          // File was truncated
+          this.lastSize = newSize;
+          return;
+        }
+
+        // Read only the new content
+        const stream = fs.createReadStream(logFile, {
+          start: this.lastSize,
+          end: newSize
+        });
+
+        stream.on('data', this.#handleChunk.bind(this));
+
+        this.lastSize = newSize;
+      }
+    });
+
+    console.log(`Watching for changes in ${logFile}`);
+  }
+}
+
+module.exports = Logfather;
