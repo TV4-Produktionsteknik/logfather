@@ -1,7 +1,7 @@
 {
   "name": "logfather",
   "version": "1.0.0",
-  "description": "Parses logs and indexes them in MongoDB",
+  "description": "Parses logs and stores them in MongoDB",
   "main": "src/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -9,9 +9,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "devDependencies": {
-    "dotenv": "^16.4.7",
-    "nodemon": "^3.1.9"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TV4-Produktionsteknik/logfather.git"
   },
   "dependencies": {
     "mongodb": "^6.12.0"
